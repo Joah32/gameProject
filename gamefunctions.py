@@ -3,6 +3,7 @@
 there is a function for purchasing an item, generating a monster, 
 and printing a shop and welcome"""
 import random
+import sys 
 #this function is for purchasing items
 def purchase_item(itemPrice: int, startingMoney: int, quantityToPurchase: int = 1,): 
     """This function controls item purchases, verifies the item can be afforded and returns a purchase quantity and leftover money"""  
@@ -62,8 +63,7 @@ def print_welcome(name: str, width: int) -> None:
     """This function prints a centered welcome with a provided name"""
     message = f"Hello, {name}!"
     print(message.center(width))
-
-
+    
 def print_shop_menu(item1Name: str, item1Price: float, item2Name: str, item2Price: float) -> None:
     """prints a formatted bordered menu for two items and their prices"""
     print(",_______________________,")
@@ -131,6 +131,104 @@ def test_functions():
 
     print("\n--- Differing Price Precisions ---")
     print_shop_menu("Milk", 3, "Bread", 2.349)
-     
+def display_fight_stats(player_hp: int, monster_name: str, monster_hp: int) -> None:
+    """Shows player and monster HP during a fight"""
+    print("-" * 20)
+    print(f"Your HP: {player_hp}")
+    print(f"{monster_name}'s HP: {monster_hp}")
+    print("-" * 20)
+def get_fight_action() -> str:
+    """Asks the user for their action during a fight 
+    and returns the choice."""
+    print("What will you do?")
+    print("  1) Fight")
+    print("  2) Run")
+    action = input("Enter your choice (1-2): ")
+    return action
+def handle_fight_turn(player_hp: int, player_power: int, monster_hp: int, monster_power: int, monster_name: str) -> tuple[int, int]:
+    """ Does some math to handle one turn of combat, 
+    returns new health values for player and monster
+    """
+    # Player's turn
+    monster_hp -= player_power
+    print(f"You attack the {monster_name}, dealing {player_power} damage.")
+
+    # Monsters turn
+    if monster_hp > 0:
+        player_hp -= monster_power
+        print(f"The {monster_name} attacks you, dealing {monster_power} damage.")
+    
+    return player_hp, monster_hp
+def handle_fight_end(player_hp: int, player_gold: int, monster_hp: int, monster_name: str, monster_gold: int) -> tuple[int, int]:
+    """
+    This happens at the end of a fight
+    """
+    #Player loses
+    if player_hp <= 0:
+        print(f"The {monster_name} defeated you.")
+    #Player wins       
+    elif monster_hp <= 0:
+        print(f"\nYou defeated the {monster_name}!")
+        player_gold += monster_gold
+        print(f"You found {monster_gold} gold! You now have {player_gold} gold.")
+    
+    print("You return to town.")
+    return player_hp, player_gold
+def handle_fight(player_hp: int, player_gold: int, player_power: int) -> tuple[int, int]:
+    """
+    Manages a single fight 
+    Generates a monster and runs the fight loop
+    Returns the player's updated HP and gold after the fight
+    """
+    #Make a monster
+    monster = new_random_monster()
+    monster_hp = monster['health']
+    monster_power = monster['power']
+    
+    print(f"\nYou leave town and encounter a {monster['name']}!")
+    print(f"> {monster['description']}")
+
+    #fight loop
+    while player_hp > 0 and monster_hp > 0:
+        
+        display_fight_stats(player_hp, monster['name'], monster_hp)
+        user_action = get_fight_action()
+
+        if user_action == "1":
+            # Call the turn handler
+            player_hp, monster_hp = handle_fight_turn(
+                player_hp, player_power, 
+                monster_hp, monster_power, monster['name']
+            )
+        elif user_action == "2":
+            print("\nYou successfully ran away!")
+            break  # Exit the 'while' loop
+        else:
+            print("\nUnrecognized command. Try again.")
+
+    #end fight
+    player_hp, player_gold = handle_fight_end(
+        player_hp, player_gold, 
+        monster_hp, monster['name'], monster['money']
+    )
+    
+    # Return new gold and HP
+    return player_hp, player_gold
+def handle_sleep(player_hp: int, player_gold: int, max_hp: int, sleep_cost: int) -> tuple[int, int]:
+    """
+    Function for sleeping, 
+    returns refreshed HP and reduced gold
+    """
+    if player_gold >= sleep_cost:
+        if player_hp == max_hp:
+            print("\nYou are already at full health.")
+        else:
+            player_gold -= sleep_cost
+            player_hp = max_hp
+            print(f"\nYou sleep and feel better.\n Your health is restored to {max_hp} HP.")
+            print(f"You paid {sleep_cost} gold and have {player_gold} gold remaining.")
+    else:
+        print(f"\nYou need {sleep_cost} gold to sleep, but you only have {player_gold}.")
+    return player_hp, player_gold
 if __name__ == "__main__":
    test_functions()
