@@ -72,65 +72,7 @@ def print_shop_menu(item1Name: str, item1Price: float, item2Name: str, item2Pric
     price2_str = f"${item2Price:.2f}"
     print(f"| {item2Name:<12}{price2_str:>8} |")
     print(",_______________________,")
-"""This function calls tests for the game functions above"""
-def test_functions():
-#this part will be a demonstration 
-    print("---Demonstration of purchase_item---")
-    #Shop Demo 1 using default quantity
-    price_1 = 341
-    money_1 = 2112
-    print(f"\nTest 1: Price=${price_1}, Money=${money_1}, Purchase Quantity: Default (1)")
-    num_purchased_1, leftover_money_1 = purchase_item(price_1, money_1)
-    print(f"Items Purchased: {num_purchased_1}")
-    print(f"Money Remaining: {leftover_money_1}")
-    #Shop Demo 2 attempting to purchase too much
-    price_2 = 123
-    money_2 = 201
-    quantity_2 = 3
-    print(f"\nTest 2: Price=${price_2}, Money=${money_2}, Purchase Quantity: {quantity_2}")
-    num_purchased_2, leftover_money_2 = purchase_item(price_2, money_2, quantity_2)
-    print(f"Items Purchased: {num_purchased_2}")
-    print(f"Money Remaining: {leftover_money_2}")
-    #shop Demo 3 succesful full purchase
-    price_3 = 123
-    money_3 = 1000
-    quantity_3 = 3
-    print(f"\nTest 3: Price=${price_3}, Money=${money_3}, Purchase Quantity: {quantity_3}")
-    num_purchased_3, leftover_money_3 = purchase_item(price_3, money_3, quantity_3)
-    print(f"Items Purchased: {num_purchased_3}")
-    print(f"Money Remaining: {leftover_money_3}")
-    #Random monster demonstration
-    print("---Demonstration of purchase_item---")
-    #1st monster
-    monster_a = new_random_monster()
-    print("\nMonster A:")
-    print(f"Name: {monster_a['name']}")
-    print(f"Description: {monster_a['description']}")
-    print(f"Health: {monster_a['health']}")
-    print(f"Power: {monster_a['power']}")
-    print(f"Money Drop: {monster_a['money']}")
-    #2nd monster
-    monster_b = new_random_monster()
-    print("\nMonster B:")
-    print(f"Name: {monster_b['name']}")
-    print(f"Description: {monster_b['description']}")
-    print(f"Health: {monster_b['health']}")
-    print(f"Power: {monster_b['power']}")
-    print(f"Money Drop: {monster_b['money']}")
-    #3rd monster
-    monster_c = new_random_monster()
-    print("\nMonster C:")
-    print(f"Name: {monster_c['name']}")
-    print(f"Description: {monster_c['description']}")
-    print(f"Health: {monster_c['health']}")
-    print(f"Power: {monster_c['power']}")
-    print(f"Money Drop: {monster_c['money']}")
-    # shop menu examples
-    print("--- Differing Item Name Lengths ---")
-    print_shop_menu("Apples", 1.5, "Watermelon", 4.0)
 
-    print("\n--- Differing Price Precisions ---")
-    print_shop_menu("Milk", 3, "Bread", 2.349)
 def display_fight_stats(player_hp: int, monster_name: str, monster_hp: int) -> None:
     """Shows player and monster HP during a fight"""
     print("-" * 20)
@@ -145,20 +87,46 @@ def get_fight_action() -> str:
     print("  2) Run")
     action = input("Enter your choice (1-2): ")
     return action
-def handle_fight_turn(player_hp: int, player_power: int, monster_hp: int, monster_power: int, monster_name: str) -> tuple[int, int]:
-    """ Does some math to handle one turn of combat, 
-    returns new health values for player and monster
+def handle_fight_turn(
+    player_hp: int, 
+    player_power: int, 
+    monster_hp: int, 
+    monster_power: int, 
+    monster_name: str, 
+    equipped_weapon: dict
+) -> tuple[int, int, dict]:
+    """ 
+    Does some math for one turn of combat, 
+    returns updated health values for player and monster, and the updated equipped_weapon.
     """
+    
+    # Apply weapon bonus damage
+    weapon_bonus = 0
+    if equipped_weapon:
+        # Check if it has a damage bonus and durability
+        if 'damageBonus' in equipped_weapon and equipped_weapon['currentDurability'] > 0:
+            weapon_bonus = equipped_weapon['damageBonus']
+            
+            # Reduce durability
+            equipped_weapon['currentDurability'] -= 1
+            
+            if equipped_weapon['currentDurability'] == 0:
+                print(f"\n*** Your {equipped_weapon['name'].capitalize()} broke! ***")
+            
+    
+    total_player_damage = player_power + weapon_bonus
+    
     # Player's turn
-    monster_hp -= player_power
-    print(f"You attack the {monster_name}, dealing {player_power} damage.")
+    monster_hp -= total_player_damage
+    print(f"You attack the {monster_name}, dealing {total_player_damage} damage (Base: {player_power}, Weapon Bonus: {weapon_bonus}).")
 
     # Monsters turn
     if monster_hp > 0:
         player_hp -= monster_power
         print(f"The {monster_name} attacks you, dealing {monster_power} damage.")
     
-    return player_hp, monster_hp
+    # **Return the updated equipped_weapon**
+    return player_hp, monster_hp, equipped_weapon
 def handle_fight_end(player_hp: int, player_gold: int, monster_hp: int, monster_name: str, monster_gold: int) -> tuple[int, int]:
     """
     This happens at the end of a fight
@@ -174,46 +142,77 @@ def handle_fight_end(player_hp: int, player_gold: int, monster_hp: int, monster_
     
     print("You return to town.")
     return player_hp, player_gold
-def handle_fight(player_hp: int, player_gold: int, player_power: int) -> tuple[int, int]:
+def handle_fight(
+    player_hp: int, 
+    player_gold: int, 
+    player_power: int,
+    equipped_weapon: dict,       # New parameter
+    player_inventory: list       # New parameter
+) -> tuple[int, int, dict, list]:
     """
     Manages a single fight 
     Generates a monster and runs the fight loop
-    Returns the player's updated HP and gold after the fight
+    Returns the player's updated HP, gold, equipped_weapon, and inventory after the fight
     """
-    #Make a monster
+    # Make a monster
     monster = new_random_monster()
     monster_hp = monster['health']
     monster_power = monster['power']
     
     print(f"\nYou leave town and encounter a {monster['name']}!")
     print(f"> {monster['description']}")
+    
+    # Check for consumables that instantly end the fight
+    smoke_bomb_index = next(
+        (i for i, item in enumerate(player_inventory) if item.get('name') == 'smoke_bomb'), 
+        -1
+    )
 
-    #fight loop
+    # fight loop
     while player_hp > 0 and monster_hp > 0:
         
         display_fight_stats(player_hp, monster['name'], monster_hp)
-        user_action = get_fight_action()
+        user_action = get_fight_action() # Still 1) Fight, 2) Run
+        
+        # Add the option to use a consumable if available
+        if smoke_bomb_index != -1:
+            print("  3) Use Smoke Bomb (Defeat Monster)")
+            user_action = input("Enter your choice (1-3): ")
 
         if user_action == "1":
             # Call the turn handler
-            player_hp, monster_hp = handle_fight_turn(
+            player_hp, monster_hp, equipped_weapon = handle_fight_turn(
                 player_hp, player_power, 
-                monster_hp, monster_power, monster['name']
+                monster_hp, monster_power, monster['name'],
+                equipped_weapon # New parameter
             )
+            
         elif user_action == "2":
             print("\nYou successfully ran away!")
             break  # Exit the 'while' loop
+            
+        elif user_action == "3" and smoke_bomb_index != -1:
+            print(f"\nYou threw a Smoke Bomb! The {monster['name']} is confused and defeated!")
+            player_inventory.pop(smoke_bomb_index)
+            monster_hp = 0
+            break
+            
         else:
             print("\nUnrecognized command. Try again.")
 
-    #end fight
+    # If the equipped weapon broke during the fight, unequip it here.
+    if equipped_weapon and equipped_weapon['currentDurability'] <= 0:
+        print(f"You unequip the broken {equipped_weapon['name'].capitalize()}.")
+        equipped_weapon = {} # Unequip the broken item
+    
+    # end fight
     player_hp, player_gold = handle_fight_end(
         player_hp, player_gold, 
         monster_hp, monster['name'], monster['money']
     )
     
-    # Return new gold and HP
-    return player_hp, player_gold
+    #Return updated gold, HP, equipped_weapon, and inventory
+    return player_hp, player_gold, equipped_weapon, player_inventory
 def handle_sleep(player_hp: int, player_gold: int, max_hp: int, sleep_cost: int) -> tuple[int, int]:
     """
     Function for sleeping, 
@@ -230,5 +229,147 @@ def handle_sleep(player_hp: int, player_gold: int, max_hp: int, sleep_cost: int)
     else:
         print(f"\nYou need {sleep_cost} gold to sleep, but you only have {player_gold}.")
     return player_hp, player_gold
-if __name__ == "__main__":
-   test_functions()
+# This dictionary stores the base stats for the items in the shop
+ITEM_TEMPLATES = {
+    "sword": {
+        "name": "sword", 
+        "type": "weapon", 
+        "maxDurability": 15, 
+        "currentDurability": 15, 
+        "damageBonus": 5
+    },
+    "smoke_bomb": {
+        "name": "smoke_bomb", 
+        "type": "consumable", 
+        "note": "A thick smoke that helps you escape a difficult fight."
+    }
+}
+
+# Shop Inventory
+# This lists the items available for purchase in the shop
+SHOP_INVENTORY = [
+    {"template_key": "sword", "price": 50, "display_name": "A Shiny Sword"},
+    {"template_key": "smoke_bomb", "price": 10, "display_name": "Smoke Bomb"}
+]
+
+
+def handle_shop(player_gold: int, player_inventory: list) -> tuple[int, list]:
+    """
+    Manages the shop interface for purchasing items.
+    Returns the updated player_gold and player_inventory.
+    """
+    
+    while True:
+        print("\n" + "="*30)
+        print("Welcome to the Shop!")
+        print(f"Your Gold: {player_gold}")
+        
+        # Display shop items
+        print("\nAvailable Items:")
+        for i, item in enumerate(SHOP_INVENTORY):
+            # Using the item's display name and price
+            print(f"  {i+1}) {item['display_name']} - {item['price']} Gold")
+        print("  0) Exit Shop")
+        print("="*30)
+
+        # Get and validate choice
+        choice = input("Enter the number of the item to buy (or 0 to exit): ")
+        
+        if choice == "0":
+            break
+        
+        if choice.isdigit():
+            item_index = int(choice) - 1
+            
+            if 0 <= item_index < len(SHOP_INVENTORY):
+                # Get the item info
+                shop_item = SHOP_INVENTORY[item_index]
+                item_price = shop_item['price']
+                item_key = shop_item['template_key']
+                
+                # Use the existing purchase_item function (quantity=1)
+                quantity_purchased, new_gold = purchase_item(
+                    itemPrice=item_price, 
+                    startingMoney=player_gold, 
+                    quantityToPurchase=1
+                )
+
+                if quantity_purchased > 0:
+                    player_gold = new_gold
+                    # Create a deep copy of the item template to add to inventory
+                    new_item = ITEM_TEMPLATES[item_key].copy()
+                    player_inventory.append(new_item)
+                    print(f"\n**Purchased {shop_item['display_name']}!** It's yours now!.")
+                    print(f"Remaining Gold: {player_gold}")
+                else:
+                    print(f"\nNot enough gold! You need {item_price} gold for that item.")
+            else:
+                print("\nInvalid selection number.")
+        else:
+            print("\nInvalid input. Please enter a number.")
+            
+    print("\nThanks for shopping!")
+    return player_gold, player_inventory
+def handle_equip(player_inventory: list, equipped_weapon: dict) -> tuple[dict, list]:
+    """
+    Handles equipping a 'weapon' item from the inventory.
+    Returns the updated equipped_weapon and player_inventory.
+    """
+    
+    item_type_to_equip = "weapon"
+    
+    #Find all equipable items in inventory
+    equipable_items = [
+        item for item in player_inventory 
+        if item.get("type") == item_type_to_equip
+    ]
+    
+    if not equipable_items:
+        print(f"\nYou have no {item_type_to_equip}s to equip.")
+        return equipped_weapon, player_inventory
+    
+    while True:
+        print("\n--- Equip Weapon ---")
+        print(f"Currently Equipped: {equipped_weapon.get('name', 'None').capitalize()}")
+
+        #Display equipable items
+        print(f"\nAvailable {item_type_to_equip.capitalize()}s:")
+        for i, item in enumerate(equipable_items):
+            display_name = item['name'].capitalize()
+            # Special check for durability items
+            if 'currentDurability' in item:
+                display_name += f" (Durability: {item['currentDurability']}/{item['maxDurability']})"
+            
+            print(f"  {i+1}) {display_name}")
+        
+        print("  0) Unequip Current Weapon")
+        print("  -1) Back to Town Menu")
+        print("-" * 20)
+
+        choice = input(f"Enter the number of the {item_type_to_equip} to equip (or 0/-1): ")
+
+        if choice == "-1":
+            return equipped_weapon, player_inventory
+        
+        if choice == "0":
+            if equipped_weapon:
+                print(f"\n{equipped_weapon['name'].capitalize()} has been unequipped.")
+                equipped_weapon = {}
+            else:
+                print("\nNothing is currently equipped.")
+            continue # Go back to the equip menu
+
+        if choice.isdigit():
+            item_index = int(choice) - 1
+            
+            if 0 <= item_index < len(equipable_items):
+                item_to_equip = equipable_items[item_index]
+                
+                #Equip the item
+                equipped_weapon = item_to_equip 
+                print(f"\n**{equipped_weapon['name'].capitalize()} is now equipped!**")
+                return equipped_weapon, player_inventory
+            else:
+                print("\nInvalid selection number.")
+        else:
+            print("\nInvalid input. Please enter a number.")
