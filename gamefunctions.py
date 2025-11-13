@@ -4,6 +4,35 @@ there is a function for purchasing an item, generating a monster,
 and printing a shop and welcome"""
 import random
 import sys 
+import json
+import os
+from typing import Union
+def save_game_data(filename: str, player_data: dict) -> None:
+    """Saves the game"""
+    try:
+        with open(filename, 'w') as f:
+            json.dump(player_data, f, indent=4)
+        print(f"\nGame successfully saved to '{filename}'.")
+    except IOError as e:
+        print(f"\nError saving game: {e}") 
+def load_game_data(filename: str) -> Union[dict, None]:
+    """
+   Loads the game and provides fail condition 
+    """
+    if not os.path.exists(filename):
+        return None
+    
+    try:
+        with open(filename, 'r') as f:
+            player_data = json.load(f)
+        print(f"\nGame successfully loaded from '{filename}'.")
+        return player_data
+    except json.JSONDecodeError:
+        print(f"\nError: The file '{filename}' is corrupted or not a valid JSON file.")
+        return None
+    except IOError as e:
+        print(f"\nError loading game: {e}")
+        return None   
 #this function is for purchasing items
 def purchase_item(itemPrice: int, startingMoney: int, quantityToPurchase: int = 1,): 
     """This function controls item purchases, verifies the item can be afforded and returns a purchase quantity and leftover money"""  
