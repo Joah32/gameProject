@@ -93,7 +93,7 @@ def main():
         else:
             print("\nInvalid choice. Please enter 1 or 2.")
     
-    # --- 2. Main Game Loop ---
+    # --- Main Game Loop ---
     while True:
         # Dead check
         if player_hp <= 0:
@@ -133,7 +133,6 @@ def main():
             choice = input("Enter your choice (1-6): ")
         else:
             # If not in town, automatically set choice to "1" to trigger map exploration
-            # This removes the "Wilderness Menu" entirely.
             choice = "1"
 
 
@@ -141,7 +140,7 @@ def main():
         if choice == "1":
             # Map/Explore/Continue
             
-            # 1. Call the map
+            #Call the map
             action, current_map_state = gamefunctions.handle_map(current_map_state)
             
             if action == gamefunctions.ACTION_QUIT:
@@ -149,7 +148,7 @@ def main():
                  break
             
             if action == gamefunctions.ACTION_MONSTER_ENCOUNTER:
-                # 2. Monster Encounter logic
+                #Monster Encounter logic
                 print("\nA monster has appeared!")
                 player_hp, player_gold, equipped_weapon, player_inventory = gamefunctions.handle_fight(
                     player_hp=player_hp,
@@ -158,15 +157,12 @@ def main():
                     equipped_weapon=equipped_weapon,
                     player_inventory=player_inventory
                 )
-                # 3. After the fight/flee, spawn a new monster elsewhere
+                #After the fight/flee, spawn a new monster elsewhere
                 current_map_state['monster_pos'] = generate_unique_pos(current_map_state['town_pos'])
                 
                 # Loop continues immediately, sending player back to map (because is_at_town is False)
                 continue
-                
-            # If action is ACTION_RETURN_TO_TOWN, the loop continues.
-            # 'is_at_town' will be True in the next iteration, so the Town Menu will print.
-            
+
         elif choice == "2" and is_at_town:
             # Sleep handler 
             player_hp, player_gold = gamefunctions.handle_sleep(
