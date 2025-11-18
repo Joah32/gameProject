@@ -7,6 +7,14 @@ import sys
 import json
 import os
 from typing import Union
+import pygame
+GRID_SIZE = 10
+TILE_SIZE = 32
+SCREEN_WIDTH = GRID_SIZE * TILE_SIZE
+SCREEN_HEIGHT = GRID_SIZE * TILE_SIZE
+ACTION_RETURN_TO_TOWN = "return_to_town"
+ACTION_MONSTER_ENCOUNTER = "monster_encounter"
+ACTION_QUIT = "quit"
 def save_game_data(filename: str, player_data: dict) -> None:
     """Saves the game"""
     try:
@@ -169,7 +177,6 @@ def handle_fight_end(player_hp: int, player_gold: int, monster_hp: int, monster_
         player_gold += monster_gold
         print(f"You found {monster_gold} gold! You now have {player_gold} gold.")
     
-    print("You return to town.")
     return player_hp, player_gold
 def handle_fight(
     player_hp: int, 
@@ -201,26 +208,33 @@ def handle_fight(
     while player_hp > 0 and monster_hp > 0:
         
         display_fight_stats(player_hp, monster['name'], monster_hp)
-        user_action = get_fight_action() # Still 1) Fight, 2) Run
         
-        # Add the option to use a consumable if available
-        if smoke_bomb_index != -1:
+        print("What will you do?")
+        print("  1) Fight")
+        print("  2) Run")
+        
+        has_smoke_bomb = smoke_bomb_index != -1
+        
+        if has_smoke_bomb:
             print("  3) Use Smoke Bomb (Defeat Monster)")
             user_action = input("Enter your choice (1-3): ")
+        else:
+            user_action = input("Enter your choice (1-2): ")
+            
 
         if user_action == "1":
             # Call the turn handler
             player_hp, monster_hp, equipped_weapon = handle_fight_turn(
                 player_hp, player_power, 
                 monster_hp, monster_power, monster['name'],
-                equipped_weapon # New parameter
+                equipped_weapon 
             )
             
         elif user_action == "2":
             print("\nYou successfully ran away!")
-            break  # Exit the 'while' loop
+            break 
             
-        elif user_action == "3" and smoke_bomb_index != -1:
+        elif user_action == "3" and has_smoke_bomb:
             print(f"\nYou threw a Smoke Bomb! The {monster['name']} is confused and defeated!")
             player_inventory.pop(smoke_bomb_index)
             monster_hp = 0
@@ -228,7 +242,6 @@ def handle_fight(
             
         else:
             print("\nUnrecognized command. Try again.")
-
     # If the equipped weapon broke during the fight, unequip it here.
     if equipped_weapon and equipped_weapon['currentDurability'] <= 0:
         print(f"You unequip the broken {equipped_weapon['name'].capitalize()}.")
@@ -240,7 +253,7 @@ def handle_fight(
         monster_hp, monster['name'], monster['money']
     )
     
-    #Return updated gold, HP, equipped_weapon, and inventory
+    # Return updated gold, HP, equipped_weapon, and inventory
     return player_hp, player_gold, equipped_weapon, player_inventory
 def handle_sleep(player_hp: int, player_gold: int, max_hp: int, sleep_cost: int) -> tuple[int, int]:
     """
@@ -402,3 +415,103 @@ def handle_equip(player_inventory: list, equipped_weapon: dict) -> tuple[dict, l
                 print("\nInvalid selection number.")
         else:
             print("\nInvalid input. Please enter a number.")
+def handle_map(map_state: dict) -> tuple[str, dict]:
+    """
+    Initializes and runs the Pygame map screen.
+    Handles movement, drawing, and encounter/return logic.
+    Returns the action taken and the updated map state.
+    """
+    
+    # Initialize Pygame if not already initialized
+    if not pygame.get_init():
+        try:
+            pygame.init()
+        except pygame.error as e:
+            print(f"Pygame initialization failed: {e}")
+            print("Cannot display map. Returning to town menu.")
+            return ACTION_RETURN_TO_TOWN, map_state
+
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption("World Map")
+    # Extract locations from state
+    player_x, player_y = map_state['player_pos']
+    town_x, town_y = map_state['town_pos']
+    monster_x, monster_y = map_state['monster_pos']
+    
+    running = True
+    action = None # Default action if window is closed by 'X'
+
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                # User hit the 'x' button, resulting in abrupt exit
+                action = ACTION_QUIT
+                running = False
+            
+            if event.type == pygame.KEYDOWN:
+                dx, dy = 0, 0
+                
+                # Handle Movement
+                if event.key == pygame.K_UP:
+                    dy = -1
+                elif event.key == pygame.K_DOWN:
+                    dy = 1
+                elif event.key == pygame.K_LEFT:
+                    dx = -1
+                elif event.key == pygame.K_RIGHT:
+                    dx = 1
+                
+                # Calculate new potential position
+                new_x = player_x + dx
+                new_y = player_y + dy
+                # Clamp position to grid bounds (0 to GRID_SIZE - 1)
+                if 0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE:
+                    player_x = new_x
+                    player_y = new_y
+                    
+                    # Check for immediate action after successful move
+                    
+                    # 1. Check for Monster Encounter
+                    if (player_x, player_y) == (monster_x, monster_y):
+                        action = ACTION_MONSTER_ENCOUNTER
+                        running = False
+                        
+                    # 2. Check for Town Return
+                    elif (player_x, player_y) == (town_x, town_y):
+                        # Only return to town if they've moved away first
+                        if map_state['moved_from_town']:
+                            action = ACTION_RETURN_TO_TOWN
+                            running = False
+                        # Mark that the player has moved away from town for the first time
+                        elif dx != 0 or dy != 0:
+                            map_state['moved_from_town'] = True               
+                            # --- Drawing ---
+        screen.fill((0, 0, 0)) # Black background
+        
+        # 1. Draw Grid Lines 
+        line_color = (50, 50, 50)
+        for i in range(GRID_SIZE):
+            pygame.draw.line(screen, line_color, (i * TILE_SIZE, 0), (i * TILE_SIZE, SCREEN_HEIGHT))
+            pygame.draw.line(screen, line_color, (0, i * TILE_SIZE), (SCREEN_WIDTH, i * TILE_SIZE))
+
+        # 2. Draw Town (Green Circle)
+        town_center = (town_x * TILE_SIZE + TILE_SIZE // 2, town_y * TILE_SIZE + TILE_SIZE // 2)
+        pygame.draw.circle(screen, (0, 150, 0), town_center, TILE_SIZE // 3)
+
+        # 3. Draw Monster (Red Circle) - Only draw if not the town square
+        if (monster_x, monster_y) != (town_x, town_y):
+             monster_center = (monster_x * TILE_SIZE + TILE_SIZE // 2, monster_y * TILE_SIZE + TILE_SIZE // 2)
+             pygame.draw.circle(screen, (150, 0, 0), monster_center, TILE_SIZE // 3)
+        
+        # 4. Draw Player (White Square)
+        player_rect = pygame.Rect(player_x * TILE_SIZE, player_y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+        pygame.draw.rect(screen, (255, 255, 255), player_rect, 2) # Draw white border
+        
+        pygame.display.flip() # Update the full screen
+
+    pygame.quit() # Close Pygame window
+    
+    # Update map state with new position before returning
+    map_state['player_pos'] = (player_x, player_y)
+    
+    return action, map_state
