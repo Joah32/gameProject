@@ -8,6 +8,8 @@ import json
 import os
 from typing import Union
 import pygame
+import wanderingMonster
+
 GRID_SIZE = 10
 TILE_SIZE = 32
 SCREEN_WIDTH = GRID_SIZE * TILE_SIZE
@@ -41,7 +43,6 @@ def load_game_data(filename: str) -> Union[dict, None]:
     except IOError as e:
         print(f"\nError loading game: {e}")
         return None   
-#this function is for purchasing items
 def purchase_item(itemPrice: int, startingMoney: int, quantityToPurchase: int = 1,): 
     """This function controls item purchases, verifies the item can be afforded and returns a purchase quantity and leftover money"""  
     #error condition
@@ -60,47 +61,10 @@ def purchase_item(itemPrice: int, startingMoney: int, quantityToPurchase: int = 
         leftover_money = startingMoney - cost_purchased
     #what just happened
     return quantity_purchased, leftover_money 
-
-#this function is for a random monster 
-def new_random_monster():
-    """This makes a monster that has randomized health power and money"""
-    monster_types = [ 
-        {'name': 'Goblin',
-         'description': 'A goblin who looks unhappy you are here',
-         'health_range': (15, 30),
-         'power_range': (5, 10),
-         'money_range': (25,50)},
-        {'name': 'Vulture',
-         'description':'A smelly angry bird',
-         'health_range': (5, 10),
-         'power_range': (1, 5),
-         'money_range': (5,10)},
-         {'name': 'Troll',
-         'description':'A large blue creature with a giant club',
-         'health_range': (50, 100),
-         'power_range': (30, 50),
-         'money_range': (75,100)}]
-    #choose a monster
-    monster_data = random.choice(monster_types)
-    health = random.randint(*monster_data['health_range'])
-    power = random.randint(*monster_data['power_range'])
-    base_money = random.randint(*monster_data['money_range'])
-    money_modifier = random.random() * 0.2 + 0.9
-    money = int(base_money * money_modifier)
-    #put the random monster in a dictionary
-    new_monster = {
-        'name': monster_data['name'],
-        'description': monster_data['description'],
-        'health': health,
-        'power' : power,
-        'money': money
-            }
-    return new_monster
 def print_welcome(name: str, width: int) -> None:
     """This function prints a centered welcome with a provided name"""
     message = f"Hello, {name}!"
     print(message.center(width))
-    
 def print_shop_menu(item1Name: str, item1Price: float, item2Name: str, item2Price: float) -> None:
     """prints a formatted bordered menu for two items and their prices"""
     print(",_______________________,")
@@ -109,7 +73,6 @@ def print_shop_menu(item1Name: str, item1Price: float, item2Name: str, item2Pric
     price2_str = f"${item2Price:.2f}"
     print(f"| {item2Name:<12}{price2_str:>8} |")
     print(",_______________________,")
-
 def display_fight_stats(player_hp: int, monster_name: str, monster_hp: int) -> None:
     """Shows player and monster HP during a fight"""
     print("-" * 20)
@@ -178,25 +141,36 @@ def handle_fight_end(player_hp: int, player_gold: int, monster_hp: int, monster_
         print(f"You found {monster_gold} gold! You now have {player_gold} gold.")
     
     return player_hp, player_gold
+def populate_monsters(count, town_pos):
+    """Creates a list of WanderingMonster objects."""
+    monsters = []
+    for _ in range(count):
+        m = wanderingMonster.WanderingMonster(GRID_SIZE, town_pos)
+        monsters.append(m)
+    return monsters
+
 def handle_fight(
     player_hp: int, 
     player_gold: int, 
     player_power: int,
-    equipped_weapon: dict,       # New parameter
-    player_inventory: list       # New parameter
-) -> tuple[int, int, dict, list]:
+    equipped_weapon: dict,       
+    player_inventory: list,
+    monster: dict 
+) -> tuple[int, int, dict, list, bool]:
     """
-    Manages a single fight 
-    Generates a monster and runs the fight loop
-    Returns the player's updated HP, gold, equipped_weapon, and inventory after the fight
+    Manages a single fight with a specific monster.
+    Returns updated stats and a boolean indicating if the monster was defeated.
     """
-    # Make a monster
-    monster = new_random_monster()
-    monster_hp = monster['health']
-    monster_power = monster['power']
     
-    print(f"\nYou leave town and encounter a {monster['name']}!")
-    print(f"> {monster['description']}")
+    # Use attributes from the passed monster object
+    monster_hp = monster.health
+    monster_power = monster.power
+    monster_name = monster.name
+    monster_desc = monster.description
+    monster_money = monster.money
+    
+    print(f"\nYou encounter a {monster_name}!")
+    print(f"> {monster_desc}")
     
     # Check for consumables that instantly end the fight
     smoke_bomb_index = next(
@@ -207,7 +181,7 @@ def handle_fight(
     # fight loop
     while player_hp > 0 and monster_hp > 0:
         
-        display_fight_stats(player_hp, monster['name'], monster_hp)
+        display_fight_stats(player_hp, monster_name, monster_hp)
         
         print("What will you do?")
         print("  1) Fight")
@@ -226,7 +200,7 @@ def handle_fight(
             # Call the turn handler
             player_hp, monster_hp, equipped_weapon = handle_fight_turn(
                 player_hp, player_power, 
-                monster_hp, monster_power, monster['name'],
+                monster_hp, monster_power, monster_name,
                 equipped_weapon 
             )
             
@@ -235,26 +209,27 @@ def handle_fight(
             break 
             
         elif user_action == "3" and has_smoke_bomb:
-            print(f"\nYou threw a Smoke Bomb! The {monster['name']} is confused and defeated!")
+            print(f"\nYou threw a Smoke Bomb! The {monster_name} is confused and defeated!")
             player_inventory.pop(smoke_bomb_index)
             monster_hp = 0
             break
             
         else:
             print("\nUnrecognized command. Try again.")
+    
     # If the equipped weapon broke during the fight, unequip it here.
     if equipped_weapon and equipped_weapon['currentDurability'] <= 0:
         print(f"You unequip the broken {equipped_weapon['name'].capitalize()}.")
-        equipped_weapon = {} # Unequip the broken item
+        equipped_weapon = {} 
     
     # end fight
     player_hp, player_gold = handle_fight_end(
         player_hp, player_gold, 
-        monster_hp, monster['name'], monster['money']
+        monster_hp, monster_name, monster_money
     )
     
-    # Return updated gold, HP, equipped_weapon, and inventory
-    return player_hp, player_gold, equipped_weapon, player_inventory
+    # Return updated gold, HP, equipped_weapon, inventory, and win status
+    return player_hp, player_gold, equipped_weapon, player_inventory, monster_hp <= 0
 def handle_sleep(player_hp: int, player_gold: int, max_hp: int, sleep_cost: int) -> tuple[int, int]:
     """
     Function for sleeping, 
@@ -286,15 +261,11 @@ ITEM_TEMPLATES = {
         "note": "A thick smoke that helps you escape a difficult fight."
     }
 }
-
-# Shop Inventory
-# This lists the items available for purchase in the shop
+# This dictionary stores the base stats for the items in the shop
 SHOP_INVENTORY = [
-    {"template_key": "sword", "price": 50, "display_name": "A Shiny Sword"},
+    {"template_key": "sword", "price": 30, "display_name": "A Shiny Sword"},
     {"template_key": "smoke_bomb", "price": 10, "display_name": "Smoke Bomb"}
 ]
-
-
 def handle_shop(player_gold: int, player_inventory: list) -> tuple[int, list]:
     """
     Manages the shop interface for purchasing items.
@@ -436,7 +407,7 @@ def handle_map(map_state: dict) -> tuple[str, dict]:
     # Extract locations from state
     player_x, player_y = map_state['player_pos']
     town_x, town_y = map_state['town_pos']
-    monster_x, monster_y = map_state['monster_pos']
+    monsters = map_state['monsters']
     
     running = True
     action = None # Default action if window is closed by 'X'
@@ -461,57 +432,80 @@ def handle_map(map_state: dict) -> tuple[str, dict]:
                 elif event.key == pygame.K_RIGHT:
                     dx = 1
                 
-                # Calculate new potential position
+                #Calculate new potential position
                 new_x = player_x + dx
                 new_y = player_y + dy
-                # Clamp position to grid bounds (0 to GRID_SIZE - 1)
+                #Clamp position to grid bounds (0 to GRID_SIZE - 1)
                 if 0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE:
                     player_x = new_x
                     player_y = new_y
                     
-                    # Check for immediate action after successful move
+                    #Player-initiated Encounter Check
+                    #Check if player moved onto a monster's square
+                    for monster in monsters:
+                        if (player_x, player_y) == monster.get_pos():
+                            map_state['active_encounter'] = monster
+                            action = ACTION_MONSTER_ENCOUNTER
+                            running = False
+                            break #Exit monster loop
+                    if not running:
+                        break #Exit event loop
+
+                    # --- Monster Movement ---
+                    # Increment turn counter for each player move
+                    map_state['turn_count'] += 1
                     
-                    # 1. Check for Monster Encounter
-                    if (player_x, player_y) == (monster_x, monster_y):
-                        action = ACTION_MONSTER_ENCOUNTER
-                        running = False
-                        
-                    # 2. Check for Town Return
-                    elif (player_x, player_y) == (town_x, town_y):
-                        # Only return to town if they've moved away first
+                    for monster in monsters:
+                        # Pass the global turn count to the move function
+                        monster.move((town_x, town_y), map_state['turn_count'])
+                        #Monster-initiated Encounter Check
+                        # Check if a monster moved onto the player's square
+                        if (player_x, player_y) == monster.get_pos():
+                            map_state['active_encounter'] = monster
+                            action = ACTION_MONSTER_ENCOUNTER
+                            running = False
+                            break #Exit monster loop
+                    if not running:
+                        break #Exit event loop
+                    
+                    #Check for Town Return
+                    if (player_x, player_y) == (town_x, town_y):
+                        #Only return to town if they've moved away first
                         if map_state['moved_from_town']:
                             action = ACTION_RETURN_TO_TOWN
                             running = False
-                        # Mark that the player has moved away from town for the first time
-                        elif dx != 0 or dy != 0:
-                            map_state['moved_from_town'] = True               
+                        #Mark that the player has moved away from town for the first time
+                    elif dx != 0 or dy != 0:
+                        map_state['moved_from_town'] = True               
                             # --- Drawing ---
-        screen.fill((0, 0, 0)) # Black background
+        screen.fill((0, 0, 0)) #Black background
         
-        # 1. Draw Grid Lines 
+        #Draw Grid Lines 
         line_color = (50, 50, 50)
         for i in range(GRID_SIZE):
             pygame.draw.line(screen, line_color, (i * TILE_SIZE, 0), (i * TILE_SIZE, SCREEN_HEIGHT))
             pygame.draw.line(screen, line_color, (0, i * TILE_SIZE), (SCREEN_WIDTH, i * TILE_SIZE))
 
-        # 2. Draw Town (Green Circle)
+        #Draw Town 
         town_center = (town_x * TILE_SIZE + TILE_SIZE // 2, town_y * TILE_SIZE + TILE_SIZE // 2)
         pygame.draw.circle(screen, (0, 150, 0), town_center, TILE_SIZE // 3)
 
-        # 3. Draw Monster (Red Circle) - Only draw if not the town square
-        if (monster_x, monster_y) != (town_x, town_y):
-             monster_center = (monster_x * TILE_SIZE + TILE_SIZE // 2, monster_y * TILE_SIZE + TILE_SIZE // 2)
-             pygame.draw.circle(screen, (150, 0, 0), monster_center, TILE_SIZE // 3)
+        #Draw Monsters 
+        for monster in monsters:
+            monster_x, monster_y = monster.get_pos()
+            if (monster_x, monster_y) != (town_x, town_y):
+                 monster_center = (monster_x * TILE_SIZE + TILE_SIZE // 2, monster_y * TILE_SIZE + TILE_SIZE // 2)
+                 pygame.draw.circle(screen, monster.color, monster_center, TILE_SIZE // 3)
         
-        # 4. Draw Player (White Square)
+        #Draw Player 
         player_rect = pygame.Rect(player_x * TILE_SIZE, player_y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-        pygame.draw.rect(screen, (255, 255, 255), player_rect, 2) # Draw white border
+        pygame.draw.rect(screen, (255, 255, 255), player_rect, 2) #Draw white border
         
-        pygame.display.flip() # Update the full screen
+        pygame.display.flip() #Update the full screen
 
-    pygame.quit() # Close Pygame window
+    pygame.quit() #Close Pygame window
     
-    # Update map state with new position before returning
+    #Update map state with new position before returning
     map_state['player_pos'] = (player_x, player_y)
     
     return action, map_state
