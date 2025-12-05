@@ -95,7 +95,7 @@ def main():
         else:
             print("\nInvalid choice. Please enter 1 or 2.")
     
-    # --- Main Game Loop ---
+    #Main Game Loop
     while True:
         # Dead check
         if player_hp <= 0:

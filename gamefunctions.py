@@ -403,7 +403,21 @@ def handle_map(map_state: dict) -> tuple[str, dict]:
             return ACTION_RETURN_TO_TOWN, map_state
 
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("World Map")
+    pygame.display.set_caption("Space")
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    sprites_dir = os.path.join(current_dir, "Sprites")
+    player_sprite = None
+    try:
+        raw_player = pygame.image.load(os.path.join(sprites_dir, "Player.png"))
+        player_sprite = pygame.transform.scale(raw_player, (TILE_SIZE, TILE_SIZE))
+    except (pygame.error, FileNotFoundError) as e:
+        print(f"Failed to load 'Player.png'")
+    town_sprite = None
+    try:
+        raw_town = pygame.image.load(os.path.join(sprites_dir, "SpaceStation.png"))
+        town_sprite = pygame.transform.scale(raw_town, (TILE_SIZE, TILE_SIZE))
+    except (pygame.error, FileNotFoundError) as e:
+        print(f"Failed to load 'SpaceStation.png'")
     # Extract locations from state
     player_x, player_y = map_state['player_pos']
     town_x, town_y = map_state['town_pos']
@@ -487,19 +501,28 @@ def handle_map(map_state: dict) -> tuple[str, dict]:
             pygame.draw.line(screen, line_color, (0, i * TILE_SIZE), (SCREEN_WIDTH, i * TILE_SIZE))
 
         #Draw Town 
-        town_center = (town_x * TILE_SIZE + TILE_SIZE // 2, town_y * TILE_SIZE + TILE_SIZE // 2)
-        pygame.draw.circle(screen, (0, 150, 0), town_center, TILE_SIZE // 3)
+        if town_sprite:
+            screen.blit(town_sprite, (town_x * TILE_SIZE, town_y * TILE_SIZE))
+        else:
+            town_center = (town_x * TILE_SIZE + TILE_SIZE // 2, town_y * TILE_SIZE + TILE_SIZE // 2)
+            pygame.draw.circle(screen, (0, 150, 0), town_center, TILE_SIZE // 3)
 
         #Draw Monsters 
         for monster in monsters:
             monster_x, monster_y = monster.get_pos()
             if (monster_x, monster_y) != (town_x, town_y):
-                 monster_center = (monster_x * TILE_SIZE + TILE_SIZE // 2, monster_y * TILE_SIZE + TILE_SIZE // 2)
-                 pygame.draw.circle(screen, monster.color, monster_center, TILE_SIZE // 3)
+                 if hasattr(monster, 'sprite') and monster.sprite:
+                     screen.blit(monster.sprite, (monster_x * TILE_SIZE, monster_y * TILE_SIZE))
+                 else:
+                     monster_center = (monster_x * TILE_SIZE + TILE_SIZE // 2, monster_y * TILE_SIZE + TILE_SIZE // 2)
+                     pygame.draw.circle(screen, monster.color, monster_center, TILE_SIZE // 3)
         
         #Draw Player 
-        player_rect = pygame.Rect(player_x * TILE_SIZE, player_y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-        pygame.draw.rect(screen, (255, 255, 255), player_rect, 2) #Draw white border
+        if player_sprite:
+            screen.blit(player_sprite, (player_x * TILE_SIZE, player_y * TILE_SIZE))
+        else:
+            player_rect = pygame.Rect(player_x * TILE_SIZE, player_y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+            pygame.draw.rect(screen, (255, 255, 255), player_rect, 2) #Draw white border
         
         pygame.display.flip() #Update the full screen
 

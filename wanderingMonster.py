@@ -1,5 +1,6 @@
 import random
-
+import pygame
+import os
 #colors
 COLOR_RED = (200, 0, 0)
 COLOR_GREEN = (0, 200, 0)
@@ -14,10 +15,31 @@ class WanderingMonster:
         or generate new random monster
         """
         self.grid_size = grid_size
+        self.sprite = None
         if existing_data:
             self.load_from_dict(existing_data)
         else:
             self.create_new_random_monster(town_pos)
+        self.load_sprite()
+    def load_sprite(self):
+        """
+        Attempts to load sprite for monster
+        Will revert to old circles if loading fails
+        """
+        target_sprite = getattr(self, 'sprite_name', None)
+        
+        if target_sprite:
+            try:
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                sprite_path = os.path.join(current_dir, 'sprites', target_sprite)
+                loaded_sprite = pygame.image.load(sprite_path)
+                self.sprite = pygame.transform.scale(loaded_sprite, (32, 32))
+            except (pygame.error, FileNotFoundError) as e:
+                print(f"Warning: Failed to load '{target_sprite}'")
+                print(f"   --> Attempted path: {sprite_path}")
+                print(f"   --> Error: {e}")
+                self.sprite = None
+                
     def create_new_random_monster(self, town_pos):
         """
         Creates a monster with randomized stats and a unique position.
@@ -28,25 +50,29 @@ class WanderingMonster:
              'health_range': (20, 40),
              'power_range': (8, 12),
              'money_range': (10, 30),
-             'color': COLOR_RED},
+             'color': COLOR_RED,
+             'sprite':'BadShipR.png'},
             {'name': 'Slime',
              'description': 'A gelatinous green blob.',
              'health_range': (10, 20),
              'power_range': (4, 8),
              'money_range': (5, 15),
-             'color': COLOR_GREEN},
+             'color': COLOR_GREEN,
+             'sprite':'BadShipG.png'},
             {'name': 'Vulture',
              'description': 'A smelly angry bird',
              'health_range': (15, 35),
              'power_range': (6, 10),
              'money_range': (15, 25),
-             'color': COLOR_YELLOW},
+             'color': COLOR_YELLOW,
+             'sprite':'BadShipP.png'},
             {'name': 'Troll',
              'description': 'A large creature with a giant club.',
              'health_range': (50, 80),
              'power_range': (20, 30),
              'money_range': (50, 100),
-             'color': COLOR_BLUE}
+             'color': COLOR_BLUE,
+             'sprite':'BadShipB.png'}
         ]
 
         data = random.choice(monster_types)
@@ -58,6 +84,7 @@ class WanderingMonster:
         self.power = random.randint(*data['power_range'])
         self.money = int(random.randint(*data['money_range']) * (random.random() * 0.2 + 0.9))
         self.color = data['color']
+        self.sprite_name = data['sprite']   
         
         # Generate Position besides town
         while True:
@@ -118,8 +145,8 @@ class WanderingMonster:
             'money': self.money,
             'color': self.color,
             'x': self.x,
-            'y': self.y
-        }
+            'y': self.y,
+            'sprite_name': getattr(self, 'sprite_name', None)}
     def load_from_dict(self, data):
         """Loads monster stats from a dictionary."""
         self.name = data['name']
@@ -131,3 +158,4 @@ class WanderingMonster:
         self.color = tuple(data['color']) 
         self.x = data['x']
         self.y = data['y']
+        self.sprite_name = data.get('sprite_name')
