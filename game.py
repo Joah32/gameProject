@@ -7,6 +7,7 @@ import sys
 import os
 import pygame
 import wanderingMonster
+import asteroid
 
 DEFAULT_SAVE_FILE = "savegame.json"
 
@@ -22,19 +23,20 @@ def main():
         'player_pos': initial_town_pos,
         'town_pos': initial_town_pos,
         'monsters': initial_monsters,
+        'asteroids': [],
         'moved_from_town': False,
         'turn_count': 0
     }
 
     # Startup: New Game or Load Game 
-    print("Welcome to the Adventure Game!")
+    print("Welcome to the Space Game!")
     
     save_exists = os.path.exists(DEFAULT_SAVE_FILE)
     
     # Initialize variables with default (new game) values
     player_name = ""
     player_hp = 30
-    player_max_hp = 30  
+    player_max_hp = 50  
     player_gold = 10
     player_power = 5    
     player_inventory = []
@@ -87,6 +89,18 @@ def main():
                     )
                     reloaded_monsters.append(m)
                 current_map_state['monsters'] = reloaded_monsters
+                #Reload asteroids
+                asteroid_data_list = current_map_state.get('asteroids', [])
+                reloaded_asteroids = []
+                for a_data in asteroid_data_list:
+                    a = asteroid.Asteroid(
+                        gamefunctions.GRID_SIZE, 
+                        set(), 
+                        existing_data=a_data
+                    )
+                    reloaded_asteroids.append(a)
+                current_map_state['asteroids'] = reloaded_asteroids
+                
                 break # Exit the startup loop
             else:
                 print("Failed to load game data. Starting new game instead.")
@@ -97,12 +111,25 @@ def main():
     
     #Main Game Loop
     while True:
+        action = None
         # Dead check
         if player_hp <= 0:
-            print("You have no HP left, whoops!")
-            print("Do better.")
-            break 
-
+            print("\n" + "!"*40)
+            print("CRITICAL FAILURE: Your ship has been destroyed!")
+            print("!"*40)
+            
+            choice = input("Would you like to (1) Respawn at Station or (2) Embrace the unforgiving vaccuum of space? ")
+            
+            if choice == "1":
+                print("\nRescue teams have recovered your escape pod.")
+                print("Your ship has been rebuilt at the station.")
+                player_hp = player_max_hp
+                current_map_state['player_pos'] = current_map_state['town_pos']
+                current_map_state['moved_from_town'] = False
+                continue 
+            else:
+                print("You would...")
+                break
         # Check if the player is at the Town's position
         is_at_town = current_map_state['player_pos'] == current_map_state['town_pos']
 
@@ -110,24 +137,24 @@ def main():
         if is_at_town:
             # Show Town Menu
             print("\n" + "-"*20)
-            print("You are in town.")
+            print("You are at the Space Station.")
             print(f"Current HP: {player_hp}/{player_max_hp}")
-            print(f"Current Gold: {player_gold}")
+            print(f"Current Credits: {player_gold}")
             
             # Display equipped weapon if one exists
             if equipped_weapon:
                 current_dur = equipped_weapon.get('currentDurability', 0)
                 max_dur = equipped_weapon.get('maxDurability', 0)
                 name = equipped_weapon.get('name', 'Unknown')
-                print(f"Equipped Weapon: {name.capitalize()} (Durability: {current_dur}/{max_dur})")
+                print(f"Auxilary Weapons: {name.capitalize()} (Charge: {current_dur}/{max_dur})")
             else:
-                 print("Equipped Weapon: None")
+                 print("Auxilary Weapons: None")
 
             print("\nWhat would you like to do?")
-            print("  1) Leave town (Explore Map)") 
-            print("  2) Sleep (Restore HP for 5 Gold)")
+            print("  1) Leave station (Explore Space)") 
+            print("  2) Shipyard (Repair Ship for 5 Credits)")
             print("  3) Visit Shop") 
-            print("  4) Equip Item") 
+            print("  4) Equip Weapons") 
             print("  5) Save and Quit")
             print("  6) Quit (No Save)")
             
@@ -143,41 +170,38 @@ def main():
             # Map/Explore/Continue
             action, current_map_state = gamefunctions.handle_map(current_map_state)
             
-            if action == gamefunctions.ACTION_QUIT:
-                 print("\nGame closed abruptly.")
-                 break
+        if action == gamefunctions.ACTION_QUIT:
+            print("\nGame closed abruptly.")
+            break
             
-            if action == gamefunctions.ACTION_MONSTER_ENCOUNTER:
-                enemy_monster = current_map_state.get('active_encounter')
-                #Retrieve the monster
-                if enemy_monster:
-                    player_hp, player_gold, equipped_weapon, player_inventory, won = gamefunctions.handle_fight(
-                        player_hp=player_hp,
-                        player_gold=player_gold,
-                        player_power=player_power,
-                        equipped_weapon=equipped_weapon,
-                        player_inventory=player_inventory,
-                        monster=enemy_monster 
+        if action == gamefunctions.ACTION_MONSTER_ENCOUNTER:
+            enemy_monster = current_map_state.get('active_encounter')
+            #Retrieve the monster
+            if enemy_monster:
+                player_hp, player_gold, equipped_weapon, player_inventory, won = gamefunctions.handle_fight(
+                player_hp=player_hp,
+                player_gold=player_gold,
+                player_power=player_power,
+                equipped_weapon=equipped_weapon,
+                player_inventory=player_inventory,
+                monster=enemy_monster 
                     )
                     
-                    if won:
-                        # Remove the defeated monster 
-                        current_map_state['monsters'].remove(enemy_monster)
+                if won:
+                    # Remove the defeated monster 
+                    current_map_state['monsters'].remove(enemy_monster)
                         
                         # If all monsters are cleared, spawn 2 new ones
-                        if not current_map_state['monsters']:
-                            print("\nThe area is clear... for now. New monsters appear!")
+                    if not current_map_state['monsters']:
+                            print("\nThe sector is clear... for now. New opponents appear!")
                             new_monsters = gamefunctions.populate_monsters(2, current_map_state['town_pos'])
                             current_map_state['monsters'].extend(new_monsters)
                     
                     # Cleanup active encounter key
                     current_map_state.pop('active_encounter', None)
-                
-                continue
-
         elif choice == "2" and is_at_town:
-            # Sleep handler 
-            player_hp, player_gold = gamefunctions.handle_sleep(
+        # Sleep handler 
+                player_hp, player_gold = gamefunctions.handle_sleep(
                 player_hp=player_hp,
                 player_gold=player_gold,
                 max_hp=player_max_hp,
@@ -205,7 +229,9 @@ def main():
                 'town_pos': current_map_state['town_pos'],
                 'moved_from_town': current_map_state['moved_from_town'],
                 'turn_count': current_map_state.get('turn_count', 0),
-                'monsters': [m.to_dict() for m in current_map_state['monsters']]
+                'monsters': [m.to_dict() for m in current_map_state['monsters']],
+                'asteroids': [a.to_dict() for a in current_map_state.get('asteroids', [])],
+                'bg_grid': current_map_state.get('bg_grid', [])
             }
             save_data = {
                 'player_hp': player_hp,

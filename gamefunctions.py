@@ -9,6 +9,8 @@ import os
 from typing import Union
 import pygame
 import wanderingMonster
+import asteroid
+
 
 GRID_SIZE = 10
 TILE_SIZE = 32
@@ -65,14 +67,6 @@ def print_welcome(name: str, width: int) -> None:
     """This function prints a centered welcome with a provided name"""
     message = f"Hello, {name}!"
     print(message.center(width))
-def print_shop_menu(item1Name: str, item1Price: float, item2Name: str, item2Price: float) -> None:
-    """prints a formatted bordered menu for two items and their prices"""
-    print(",_______________________,")
-    price1_str = f"${item1Price:.2f}"
-    print(f"| {item1Name:<12}{price1_str:>8} |")
-    price2_str = f"${item2Price:.2f}"
-    print(f"| {item2Name:<12}{price2_str:>8} |")
-    print(",_______________________,")
 def display_fight_stats(player_hp: int, monster_name: str, monster_hp: int) -> None:
     """Shows player and monster HP during a fight"""
     print("-" * 20)
@@ -93,39 +87,88 @@ def handle_fight_turn(
     monster_hp: int, 
     monster_power: int, 
     monster_name: str, 
-    equipped_weapon: dict
+    equipped_weapon: dict,
+    total_defense: int = 0,
+    monster_crit_chance: float = 0.05,
+    monster_crit_multiplier: float = 1.5,
+    monster_miss_chance: float = 0.05
 ) -> tuple[int, int, dict]:
     """ 
     Does some math for one turn of combat, 
     returns updated health values for player and monster, and the updated equipped_weapon.
     """
-    
-    # Apply weapon bonus damage
+    # Unarmed defaults
     weapon_bonus = 0
-    if equipped_weapon:
-        # Check if it has a damage bonus and durability
-        if 'damageBonus' in equipped_weapon and equipped_weapon['currentDurability'] > 0:
-            weapon_bonus = equipped_weapon['damageBonus']
-            
-            # Reduce durability
-            equipped_weapon['currentDurability'] -= 1
-            
-            if equipped_weapon['currentDurability'] == 0:
-                print(f"\n*** Your {equipped_weapon['name'].capitalize()} broke! ***")
-            
-    
-    total_player_damage = player_power + weapon_bonus
-    
-    # Player's turn
-    monster_hp -= total_player_damage
-    print(f"You attack the {monster_name}, dealing {total_player_damage} damage (Base: {player_power}, Weapon Bonus: {weapon_bonus}).")
+    crit_chance = 0.05
+    crit_multiplier = 1.5
+    miss_chance = 0.05
 
-    # Monsters turn
-    if monster_hp > 0:
-        player_hp -= monster_power
-        print(f"The {monster_name} attacks you, dealing {monster_power} damage.")
+    # Check equipped weapon
+    if equipped_weapon and equipped_weapon.get('currentDurability', 0) > 0:
+        weapon_bonus = equipped_weapon.get('damageBonus', 0)
+        crit_chance = equipped_weapon.get('crit_chance', 0.05)
+        crit_multiplier = equipped_weapon.get('crit_multiplier', 1.5)
+        miss_chance = equipped_weapon.get('miss_chance', 0.05)
+        
+        # Durability/ammo reduction
+        equipped_weapon['currentDurability'] -= 1    
+        if equipped_weapon['currentDurability'] == 0:
+             print(f"\n*** Your {equipped_weapon['name'].capitalize()} is not functional! ***")
+
+    # Calculate Base Damage
+    base_damage = player_power + weapon_bonus
+    final_damage = base_damage
     
-    # **Return the updated equipped_weapon**
+    # Roll for Crits/Misses
+    hit_roll = random.random() 
+
+    if hit_roll < miss_chance:
+        # Miss
+        final_damage = 0
+        print(f"\nYou fired at the {monster_name}, but missed!")
+        
+    elif random.random() < crit_chance: 
+        # Crit
+        final_damage = int(base_damage * crit_multiplier)
+        print(f"\nCRITICAL HIT!! You hit a weak spot!")
+        print(f"You attack the {monster_name}, dealing {final_damage} damage.")
+        
+    else:
+        # Standard Hit
+        print(f"You attack the {monster_name}, dealing {final_damage} damage.")
+
+    monster_hp -= final_damage
+
+    # Enemy Attack Turn
+    if monster_hp > 0:
+        monster_damage = monster_power
+        
+        # Roll for Monster Hit/Miss
+        hit_roll = random.random()
+        
+        if hit_roll < monster_miss_chance:
+            monster_damage = 0
+            print(f"The {monster_name} attacks, but misses you!")
+            
+        elif random.random() < monster_crit_chance:
+            monster_damage = int(monster_power * monster_crit_multiplier)
+            print(f"The {monster_name} lands a critical hit! Dealing {monster_damage} damage.")
+            
+        else:
+            print(f"The {monster_name} attacks you, dealing {monster_damage} damage.")
+        #Shield Logic    
+        if monster_damage > 0:
+            original_damage = monster_damage
+            monster_damage = max(0, monster_damage - total_defense)
+            
+            if total_defense > 0 and original_damage > 0:
+                print(f"   (Your shield system blocks {total_defense} damage!)")
+                print(f"   ...you still take {monster_damage} damage.")
+            
+        player_hp -= monster_damage
+      
+    return player_hp, monster_hp, equipped_weapon
+      
     return player_hp, monster_hp, equipped_weapon
 def handle_fight_end(player_hp: int, player_gold: int, monster_hp: int, monster_name: str, monster_gold: int) -> tuple[int, int]:
     """
@@ -138,7 +181,7 @@ def handle_fight_end(player_hp: int, player_gold: int, monster_hp: int, monster_
     elif monster_hp <= 0:
         print(f"\nYou defeated the {monster_name}!")
         player_gold += monster_gold
-        print(f"You found {monster_gold} gold! You now have {player_gold} gold.")
+        print(f"You found {monster_gold} credits! You now have {player_gold} credits.")
     
     return player_hp, player_gold
 def populate_monsters(count, town_pos):
@@ -148,7 +191,6 @@ def populate_monsters(count, town_pos):
         m = wanderingMonster.WanderingMonster(GRID_SIZE, town_pos)
         monsters.append(m)
     return monsters
-
 def handle_fight(
     player_hp: int, 
     player_gold: int, 
@@ -169,15 +211,17 @@ def handle_fight(
     monster_desc = monster.description
     monster_money = monster.money
     
-    print(f"\nYou encounter a {monster_name}!")
+    print(f"\nYou encounter a {monster_name} ship!")
     print(f"> {monster_desc}")
     
     # Check for consumables that instantly end the fight
-    smoke_bomb_index = next(
-        (i for i, item in enumerate(player_inventory) if item.get('name') == 'smoke_bomb'), 
+    emp_index = next(
+        (i for i, item in enumerate(player_inventory) if item.get('name') == 'emp'), 
         -1
     )
-
+    m_crit_chance = getattr(monster, 'crit_chance', 0.05)
+    m_crit_mult = getattr(monster, 'crit_multiplier', 1.5)
+    m_miss_chance = getattr(monster, 'miss_chance', 0.05)
     # fight loop
     while player_hp > 0 and monster_hp > 0:
         
@@ -187,30 +231,45 @@ def handle_fight(
         print("  1) Fight")
         print("  2) Run")
         
-        has_smoke_bomb = smoke_bomb_index != -1
+        has_emp = emp_index != -1
         
-        if has_smoke_bomb:
-            print("  3) Use Smoke Bomb (Defeat Monster)")
+        if has_emp:
+            print("  3) Use EMP (Destroy Enemy)")
             user_action = input("Enter your choice (1-3): ")
         else:
             user_action = input("Enter your choice (1-2): ")
             
 
         if user_action == "1":
+            #defense
+            current_defense = 0
+            for item in player_inventory:
+                current_defense += item.get('defense_bonus', 0)
             # Call the turn handler
             player_hp, monster_hp, equipped_weapon = handle_fight_turn(
                 player_hp, player_power, 
                 monster_hp, monster_power, monster_name,
-                equipped_weapon 
+                equipped_weapon,
+                total_defense=current_defense,
+                monster_crit_chance=m_crit_chance,
+                monster_crit_multiplier=m_crit_mult,
+                monster_miss_chance=m_miss_chance 
             )
             
         elif user_action == "2":
-            print("\nYou successfully ran away!")
-            break 
+            #make fleeing only work sometimes
+            flee_chance = random.randrange(0, 100, 1)
+            if flee_chance <= 80:
+                print("\nYou successfully Fled!")
+                break 
+            else:
+                print("\nYou did not get away!")
+                player_hp -= monster_power
+                print(f"The {monster_name} attacks you in your failed attempt to flee, dealing {monster_power} damage.")
             
-        elif user_action == "3" and has_smoke_bomb:
-            print(f"\nYou threw a Smoke Bomb! The {monster_name} is confused and defeated!")
-            player_inventory.pop(smoke_bomb_index)
+        elif user_action == "3" and has_emp:
+            print(f"\nYou sent an EMP! The {monster_name} ship is destroyed.")
+            player_inventory.pop(emp_index)
             monster_hp = 0
             break
             
@@ -218,10 +277,16 @@ def handle_fight(
             print("\nUnrecognized command. Try again.")
     
     # If the equipped weapon broke during the fight, unequip it here.
-    if equipped_weapon and equipped_weapon['currentDurability'] <= 0:
-        print(f"You unequip the broken {equipped_weapon['name'].capitalize()}.")
-        equipped_weapon = {} 
-    
+    if equipped_weapon and equipped_weapon.get('currentDurability', 0) <= 0:
+        print(f"\nYour {equipped_weapon['name'].capitalize()} has burned out!")
+        print("You discard the scrap.")
+        if equipped_weapon in player_inventory:
+            player_inventory.remove(equipped_weapon)
+        else:
+            for item in player_inventory:
+                if item['name'] == equipped_weapon['name']:
+                    player_inventory.remove(item)
+                    break
     # end fight
     player_hp, player_gold = handle_fight_end(
         player_hp, player_gold, 
@@ -237,35 +302,60 @@ def handle_sleep(player_hp: int, player_gold: int, max_hp: int, sleep_cost: int)
     """
     if player_gold >= sleep_cost:
         if player_hp == max_hp:
-            print("\nYou are already at full health.")
+            print("\nYour ship already looks great.")
         else:
             player_gold -= sleep_cost
             player_hp = max_hp
-            print(f"\nYou sleep and feel better.\n Your health is restored to {max_hp} HP.")
-            print(f"You paid {sleep_cost} gold and have {player_gold} gold remaining.")
+            print(f"\nYou eat a sandwich while the mechanic works on your ship.\n Your health is restored to {max_hp} HP.")
+            print(f"You paid {sleep_cost} credits and have {player_gold} credits remaining.")
     else:
-        print(f"\nYou need {sleep_cost} gold to sleep, but you only have {player_gold}.")
+        print(f"\nYou need {sleep_cost} credits to get repairs, but you only have {player_gold}.")
     return player_hp, player_gold
 # This dictionary stores the base stats for the items in the shop
 ITEM_TEMPLATES = {
-    "sword": {
-        "name": "sword", 
+    "rocket": {
+        "name": "Rocket Launcher", 
         "type": "weapon", 
+        "price": 30,
+        "desc": "Above average crit and damage.",
         "maxDurability": 15, 
         "currentDurability": 15, 
-        "damageBonus": 5
+        "damageBonus": 5,
+        "crit_chance": 0.25,
+        "crit_multiplier": 1.5,
+        "miss_chance": .05
+
     },
-    "smoke_bomb": {
-        "name": "smoke_bomb", 
+    "laser": {
+        "name": "Sighted Laser", 
+        "type": "weapon", 
+        "price": 50,
+        "desc": "Limited uses, High Damage, High Crit, Does not miss.",
+        "maxDurability": 5, 
+        "currentDurability": 5, 
+        "damageBonus": 8,
+        "crit_chance": 0.75,
+        "crit_multiplier": 2.0,
+        "miss_chance": 0.0
+
+    },
+    "shield": {
+        "name": "Shield System",
+        "type": "passive",
+        "price": 50,
+        "desc": "Passive. Reduces Incoming Damage",
+        "defense_bonus": 3,
+        "unique": True
+    },    
+    "emp": {
+        "name": "EMP Charge", 
         "type": "consumable", 
-        "note": "A thick smoke that helps you escape a difficult fight."
+        "price": 10,
+        "desc": "A one time use item that destroys an enemy ship",
+        "note": "A electrical pulse that can disable a ship instantly."
     }
 }
-# This dictionary stores the base stats for the items in the shop
-SHOP_INVENTORY = [
-    {"template_key": "sword", "price": 30, "display_name": "A Shiny Sword"},
-    {"template_key": "smoke_bomb", "price": 10, "display_name": "Smoke Bomb"}
-]
+SHOP_KEYS = ["rocket","laser", "emp", "shield"]
 def handle_shop(player_gold: int, player_inventory: list) -> tuple[int, list]:
     """
     Manages the shop interface for purchasing items.
@@ -273,53 +363,62 @@ def handle_shop(player_gold: int, player_inventory: list) -> tuple[int, list]:
     """
     
     while True:
-        print("\n" + "="*30)
-        print("Welcome to the Shop!")
-        print(f"Your Gold: {player_gold}")
+        print("\n" + "="*40)
+        print(f"      SHOP | Credits: {player_gold}")
+        print("="*40)
         
-        # Display shop items
-        print("\nAvailable Items:")
-        for i, item in enumerate(SHOP_INVENTORY):
-            # Using the item's display name and price
-            print(f"  {i+1}) {item['display_name']} - {item['price']} Gold")
-        print("  0) Exit Shop")
-        print("="*30)
-
-        # Get and validate choice
-        choice = input("Enter the number of the item to buy (or 0 to exit): ")
+        # Display shop items from SHOP_KEYS
+        print(f"{'#':<4} {'Item':<18} {'Price':<8} {'Description'}")
+        print("-" * 40)
+        
+        for i, key in enumerate(SHOP_KEYS):
+            item = ITEM_TEMPLATES.get(key)
+            if item:
+                name = item['name']
+                price = item['price']
+                desc = item.get('desc', '')
+                print(f"{i+1:<4} {name:<18} {price:<8} {desc}")
+                
+        print("-" * 40)
+        print("0)   Exit Shop")
+        
+        choice = input("\nEnter choice: ")
         
         if choice == "0":
             break
         
         if choice.isdigit():
-            item_index = int(choice) - 1
+            index = int(choice) - 1
             
-            if 0 <= item_index < len(SHOP_INVENTORY):
-                # Get the item info
-                shop_item = SHOP_INVENTORY[item_index]
-                item_price = shop_item['price']
-                item_key = shop_item['template_key']
-                
-                # Use the existing purchase_item function (quantity=1)
-                quantity_purchased, new_gold = purchase_item(
-                    itemPrice=item_price, 
-                    startingMoney=player_gold, 
-                    quantityToPurchase=1
-                )
-
-                if quantity_purchased > 0:
-                    player_gold = new_gold
-                    # Create a deep copy of the item template to add to inventory
-                    new_item = ITEM_TEMPLATES[item_key].copy()
+            if 0 <= index < len(SHOP_KEYS):
+                key = SHOP_KEYS[index]
+                item_template = ITEM_TEMPLATES[key]
+                price = item_template['price']
+                is_unique = item_template.get("unique", False)
+                already_owns = False
+                if is_unique:
+                    for inv_item in player_inventory:
+                        if inv_item['name'] == item_template['name']:
+                            already_owns = True
+                            break
+                if already_owns:
+                    print(f"\nYou already have a {item_template['name']} installed. You cannot carry another.")
+                    continue
+                # Check affordability
+                if player_gold >= price:
+                    player_gold -= price
+                    
+                    # Create an item to add to inventory
+                    new_item = item_template.copy()
                     player_inventory.append(new_item)
-                    print(f"\n**Purchased {shop_item['display_name']}!** It's yours now!.")
-                    print(f"Remaining Gold: {player_gold}")
+                    
+                    print(f"\n*** Purchased {new_item['name']} for {price} credits! ***")
                 else:
-                    print(f"\nNot enough gold! You need {item_price} gold for that item.")
+                    print(f"\nNot enough credits! You need {price} credits.")
             else:
-                print("\nInvalid selection number.")
+                print("\nInvalid selection.")
         else:
-            print("\nInvalid input. Please enter a number.")
+            print("\nInvalid input.")
             
     print("\nThanks for shopping!")
     return player_gold, player_inventory
@@ -334,11 +433,12 @@ def handle_equip(player_inventory: list, equipped_weapon: dict) -> tuple[dict, l
     #Find all equipable items in inventory
     equipable_items = [
         item for item in player_inventory 
-        if item.get("type") == item_type_to_equip
+        if item.get("type") == item_type_to_equip 
+        and item.get("currentDurability", 1) > 0
     ]
     
     if not equipable_items:
-        print(f"\nYou have no {item_type_to_equip}s to equip.")
+        print(f"\nYou have no functioning {item_type_to_equip}s to equip.")
         return equipped_weapon, player_inventory
     
     while True:
@@ -354,38 +454,34 @@ def handle_equip(player_inventory: list, equipped_weapon: dict) -> tuple[dict, l
                 display_name += f" (Durability: {item['currentDurability']}/{item['maxDurability']})"
             
             print(f"  {i+1}) {display_name}")
+        unequip_option = len(equipable_items) + 1
         
-        print("  0) Unequip Current Weapon")
-        print("  -1) Back to Town Menu")
-        print("-" * 20)
+        print(f"  {unequip_option}) Unequip Current Weapon")
+        print("  0) Back to Town Menu")
+        print("=" * 30)
 
-        choice = input(f"Enter the number of the {item_type_to_equip} to equip (or 0/-1): ")
-
-        if choice == "-1":
-            return equipped_weapon, player_inventory
-        
+        choice = input(f"Enter choice (0-{unequip_option}): ")
         if choice == "0":
-            if equipped_weapon:
-                print(f"\n{equipped_weapon['name'].capitalize()} has been unequipped.")
-                equipped_weapon = {}
-            else:
-                print("\nNothing is currently equipped.")
-            continue # Go back to the equip menu
+            break 
 
         if choice.isdigit():
-            item_index = int(choice) - 1
-            
-            if 0 <= item_index < len(equipable_items):
+            choice_num = int(choice)
+            if choice_num == unequip_option:
+                if equipped_weapon:
+                    print(f"\n{equipped_weapon['name'].capitalize()} has been unequipped.")
+                    equipped_weapon = {}
+                else:
+                    print("\nNothing is currently equipped.")
+            elif 1 <= choice_num <= len(equipable_items):
+                item_index = choice_num - 1
                 item_to_equip = equipable_items[item_index]
-                
-                #Equip the item
                 equipped_weapon = item_to_equip 
-                print(f"\n**{equipped_weapon['name'].capitalize()} is now equipped!**")
-                return equipped_weapon, player_inventory
-            else:
+                print(f"\n** {equipped_weapon['name'].capitalize()} is now equipped! **")
+            else: 
                 print("\nInvalid selection number.")
         else:
             print("\nInvalid input. Please enter a number.")
+    return equipped_weapon, player_inventory
 def handle_map(map_state: dict) -> tuple[str, dict]:
     """
     Initializes and runs the Pygame map screen.
@@ -404,8 +500,34 @@ def handle_map(map_state: dict) -> tuple[str, dict]:
 
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Space")
+    #Fix the annoying thing where the window for pygame is in the background
+    try:
+        import sys
+        if sys.platform.startswith('win'):
+            import ctypes
+            hwnd = pygame.display.get_wm_info()['window']
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+        else:
+            pass
+    except Exception as e:
+        print(f"Note: Could not force window focus: {e}")    
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    sprites_dir = os.path.join(current_dir, "Sprites")
+    sprites_dir = os.path.join(current_dir, "sprites")
+    #Map background
+    bg_variants = []
+    try:
+        raw_bg = pygame.image.load(os.path.join(sprites_dir, "Background.png"))
+        scaled_bg = pygame.transform.scale(raw_bg, (TILE_SIZE, TILE_SIZE))
+        for angle in [0, 90, 180, 270]:
+            bg_variants.append(pygame.transform.rotate(scaled_bg, angle))
+    except (pygame.error, FileNotFoundError):
+        print("Warning: 'Background.png' not found. Defaulting to black.")
+    #Store background
+    if 'bg_grid' not in map_state:
+        map_state['bg_grid'] = [
+            [random.randint(0, 3) for _ in range(GRID_SIZE)] 
+            for _ in range(GRID_SIZE)
+        ]
     player_sprite = None
     try:
         raw_player = pygame.image.load(os.path.join(sprites_dir, "Player.png"))
@@ -418,15 +540,19 @@ def handle_map(map_state: dict) -> tuple[str, dict]:
         town_sprite = pygame.transform.scale(raw_town, (TILE_SIZE, TILE_SIZE))
     except (pygame.error, FileNotFoundError) as e:
         print(f"Failed to load 'SpaceStation.png'")
+        if 'asteroids' not in map_state:
+            map_state['asteroids'] = []
     # Extract locations from state
     player_x, player_y = map_state['player_pos']
     town_x, town_y = map_state['town_pos']
     monsters = map_state['monsters']
+    asteroids = map_state['asteroids']
     
     running = True
     action = None # Default action if window is closed by 'X'
 
     while running:
+        asteroid_coords = {a.get_pos() for a in asteroids}
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 # User hit the 'x' button, resulting in abrupt exit
@@ -435,6 +561,11 @@ def handle_map(map_state: dict) -> tuple[str, dict]:
             
             if event.type == pygame.KEYDOWN:
                 dx, dy = 0, 0
+                #prevent softlock
+                if event.key == pygame.K_RETURN:
+                    if (player_x, player_y) == (town_x, town_y):
+                        action = ACTION_RETURN_TO_TOWN
+                        running = False
                 
                 # Handle Movement
                 if event.key == pygame.K_UP:
@@ -449,11 +580,12 @@ def handle_map(map_state: dict) -> tuple[str, dict]:
                 #Calculate new potential position
                 new_x = player_x + dx
                 new_y = player_y + dy
-                #Clamp position to grid bounds (0 to GRID_SIZE - 1)
-                if 0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE:
+                #Bounds and asteroid collision
+                if (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE 
+                    and (new_x, new_y) not in asteroid_coords):
+                    
                     player_x = new_x
                     player_y = new_y
-                    
                     #Player-initiated Encounter Check
                     #Check if player moved onto a monster's square
                     for monster in monsters:
@@ -465,13 +597,37 @@ def handle_map(map_state: dict) -> tuple[str, dict]:
                     if not running:
                         break #Exit event loop
 
-                    # --- Monster Movement ---
-                    # Increment turn counter for each player move
-                    map_state['turn_count'] += 1
                     
+                    #Increment turn counter for each player move
+                    map_state['turn_count'] += 1
+                    #move asteroids
+                    blocked_spots = {m.get_pos() for m in monsters}
+                    blocked_spots.add((player_x, player_y))
+                    blocked_spots.add((town_x, town_y))
+                    for a in asteroids:
+                        blocked_spots.add(a.get_pos())
+                    for ast in asteroids[:]:
+                        blocked_spots.discard(ast.get_pos())
+                        ast.move(blocked_spots)
+                        if ast.is_out_of_bounds():
+                            asteroids.remove(ast)
+                        else:
+                            blocked_spots.add(ast.get_pos())
+
+                    #Spawn and maintain # of asteroids
+                    while len(asteroids) < 3:
+                        current_unsafe_spawns = {(player_x, player_y), (town_x, town_y)}
+                        for a in asteroids:
+                            current_unsafe_spawns.add(a.get_pos())
+                        new_ast = asteroid.Asteroid(GRID_SIZE, current_unsafe_spawns)
+                        asteroids.append(new_ast)
+                        
+                    asteroid_coords = {a.get_pos() for a in asteroids}
+
+                    #Monster Movement
                     for monster in monsters:
                         # Pass the global turn count to the move function
-                        monster.move((town_x, town_y), map_state['turn_count'])
+                        monster.move((town_x, town_y), map_state['turn_count'], obstacles=asteroid_coords)
                         #Monster-initiated Encounter Check
                         # Check if a monster moved onto the player's square
                         if (player_x, player_y) == monster.get_pos():
@@ -491,22 +647,30 @@ def handle_map(map_state: dict) -> tuple[str, dict]:
                         #Mark that the player has moved away from town for the first time
                     elif dx != 0 or dy != 0:
                         map_state['moved_from_town'] = True               
-                            # --- Drawing ---
+                            # Drawing
         screen.fill((0, 0, 0)) #Black background
-        
-        #Draw Grid Lines 
-        line_color = (50, 50, 50)
-        for i in range(GRID_SIZE):
-            pygame.draw.line(screen, line_color, (i * TILE_SIZE, 0), (i * TILE_SIZE, SCREEN_HEIGHT))
-            pygame.draw.line(screen, line_color, (0, i * TILE_SIZE), (SCREEN_WIDTH, i * TILE_SIZE))
-
+        #Tiled Background
+        if bg_variants:
+            bg_grid = map_state['bg_grid']
+            for x in range(GRID_SIZE):
+                for y in range(GRID_SIZE):
+                    variant_index = bg_grid[x][y]
+                    screen.blit(bg_variants[variant_index], (x * TILE_SIZE, y * TILE_SIZE))
         #Draw Town 
         if town_sprite:
             screen.blit(town_sprite, (town_x * TILE_SIZE, town_y * TILE_SIZE))
         else:
             town_center = (town_x * TILE_SIZE + TILE_SIZE // 2, town_y * TILE_SIZE + TILE_SIZE // 2)
             pygame.draw.circle(screen, (0, 150, 0), town_center, TILE_SIZE // 3)
-
+        #Draw asteroid
+        for ast in asteroids:
+            ax, ay = ast.get_pos()
+            if ast.sprite:
+                screen.blit(ast.sprite, (ax * TILE_SIZE, ay * TILE_SIZE))
+            else:
+                # Draw grey circle if no sprite
+                a_center = (ax * TILE_SIZE + TILE_SIZE // 2, ay * TILE_SIZE + TILE_SIZE // 2)
+                pygame.draw.circle(screen, (100, 100, 100), a_center, TILE_SIZE // 3)
         #Draw Monsters 
         for monster in monsters:
             monster_x, monster_y = monster.get_pos()

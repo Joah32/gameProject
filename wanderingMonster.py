@@ -5,7 +5,7 @@ import os
 COLOR_RED = (200, 0, 0)
 COLOR_GREEN = (0, 200, 0)
 COLOR_BLUE = (0, 0, 200)
-COLOR_YELLOW = (200, 200, 0)
+COLOR_PURPLE = (100, 0, 100)
 
 class WanderingMonster:
     def __init__(self,grid_size, town_pos, existing_data=None):
@@ -45,35 +45,48 @@ class WanderingMonster:
         Creates a monster with randomized stats and a unique position.
         """
         monster_types = [
-            {'name': 'Goblin',
-             'description': 'A Goblin who looks unhappy you are here',
-             'health_range': (20, 40),
+            {'name': 'Martian',
+             'description': 'A ship approaches from the planet Mars. They attack you, because Martians do that.',
+             'health_range': (15, 30),
              'power_range': (8, 12),
              'money_range': (10, 30),
              'color': COLOR_RED,
-             'sprite':'BadShipR.png'},
-            {'name': 'Slime',
-             'description': 'A gelatinous green blob.',
-             'health_range': (10, 20),
-             'power_range': (4, 8),
+             'sprite':'BadShipR.png',
+             'crit_chance': 0.15, 
+             'crit_multiplier': 1.5, 
+             'miss_chance': 0.10},
+            {'name': 'Cyborg',
+             'description': 'A cyborg vessel. They would love to give you new features.',
+             'health_range': (5, 15),
+             'power_range': (15, 20),
              'money_range': (5, 15),
              'color': COLOR_GREEN,
-             'sprite':'BadShipG.png'},
-            {'name': 'Vulture',
-             'description': 'A smelly angry bird',
+             'sprite':'BadShipG.png',
+             'crit_chance': 0.10, 
+             'crit_multiplier': 1.5, 
+             'miss_chance': 0.05},
+            {'name': 'Space Pirate',
+             'description': 'This ship seems like it might be hiding something. Hopefully credits.',
              'health_range': (15, 35),
-             'power_range': (6, 10),
-             'money_range': (15, 25),
-             'color': COLOR_YELLOW,
-             'sprite':'BadShipP.png'},
-            {'name': 'Troll',
-             'description': 'A large creature with a giant club.',
-             'health_range': (50, 80),
-             'power_range': (20, 30),
+             'power_range': (6, 7),
+             'money_range': (15, 50),
+             'color': COLOR_PURPLE,
+             'sprite':'BadShipP.png',
+             'crit_chance': 0.10, 
+             'crit_multiplier': 2.0, 
+             'miss_chance': 0.25},
+            {'name': '???',
+             'description': 'Something here is not right, is it time to flee?',
+             'health_range': (30, 45),
+             'power_range': (25, 30),
              'money_range': (50, 100),
              'color': COLOR_BLUE,
-             'sprite':'BadShipB.png'}
-        ]
+             'sprite':'BadShipB.png',
+             'crit_chance': 0.10, 
+             'crit_multiplier': 2.0, 
+             'miss_chance': 0.00
+             }
+             ]
 
         data = random.choice(monster_types)
         
@@ -84,7 +97,10 @@ class WanderingMonster:
         self.power = random.randint(*data['power_range'])
         self.money = int(random.randint(*data['money_range']) * (random.random() * 0.2 + 0.9))
         self.color = data['color']
-        self.sprite_name = data['sprite']   
+        self.sprite_name = data['sprite']
+        self.crit_chance = data.get('crit_chance', 0.05)
+        self.crit_multiplier = data.get('crit_multiplier', 1.5)
+        self.miss_chance = data.get('miss_chance', 0.05)   
         
         # Generate Position besides town
         while True:
@@ -94,7 +110,7 @@ class WanderingMonster:
                 self.x = x
                 self.y = y
                 break 
-    def move(self, town_pos, turn_count):
+    def move(self, town_pos, turn_count, obstacles=None):
         """
         Attempts to move the monster in a random direction.
         Will not move off grid or into town.
@@ -107,6 +123,11 @@ class WanderingMonster:
         move_distance = 1
         if random.random() < 0.25: 
             move_distance = 2
+        #Obstacle
+        if obstacles is None:
+            obstacles = set()
+        else:
+            obstacles = set(obstacles)
         directions = [
             (0, -1), # Up
             (0, 1),  # Down
@@ -146,7 +167,10 @@ class WanderingMonster:
             'color': self.color,
             'x': self.x,
             'y': self.y,
-            'sprite_name': getattr(self, 'sprite_name', None)}
+            'sprite_name': getattr(self, 'sprite_name', None),
+            'crit_chance': getattr(self, 'crit_chance', 0.05),
+            'crit_multiplier': getattr(self, 'crit_multiplier', 1.5),
+            'miss_chance': getattr(self, 'miss_chance', 0.05)}
     def load_from_dict(self, data):
         """Loads monster stats from a dictionary."""
         self.name = data['name']
@@ -159,3 +183,6 @@ class WanderingMonster:
         self.x = data['x']
         self.y = data['y']
         self.sprite_name = data.get('sprite_name')
+        self.crit_chance = data.get('crit_chance', 0.05)
+        self.crit_multiplier = data.get('crit_multiplier', 1.5)
+        self.miss_chance = data.get('miss_chance', 0.05)
